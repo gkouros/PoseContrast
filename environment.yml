@@ -4,12 +4,12 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - pytorch::pytorch
-  - pytorch::torchvision
-  - pytorch::cudatoolkit=10.2
+  - pytorch:pytorch
+  - pytorch:torchvision
+  - pytorch:cudatoolkit=11.3
   - matplotlib
   - numpy
-  - kitsune.one::python-blender
+  # - kitsune.one:python-blender
   - tqdm
   - pip
   - scipy
