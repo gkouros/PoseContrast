@@ -6,6 +6,7 @@ __pycache__/
 data/
 *.code-workspace
 .vscode
+condor/logs/
 
 # C extensions
 *.so
