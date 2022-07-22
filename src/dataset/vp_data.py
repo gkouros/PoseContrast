@@ -27,7 +27,9 @@ categories = [
             'diningtable', 'motorbike', 'sofa', 'train', 'tvmonitor']
 
 blacklist = {category: [] for category in categories}
-blacklist['motorbike'] += ['n03791053_8626.JPEG', 'n03791053_8438.JPEG', 'n03790512_11192']
+blacklist['motorbike'] += ['n03791053_8626.JPEG', 'n03791053_8438.JPEG', 'n03790512_11192.JPEG']
+blacklist['boat'] += ['n04196502_24999.JPEG']
+blacklist['car'] += ['n04037443_21947.JPEG']
 
 # Define normalization and random disturb for input image
 disturb = TransLightning(0.1, imagenet_pca['eigval'], imagenet_pca['eigvec'])
