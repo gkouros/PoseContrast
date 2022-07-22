@@ -34,17 +34,24 @@ disturb = TransLightning(0.1, imagenet_pca['eigval'], imagenet_pca['eigvec'])
 normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
 class Pascal3D_NeMo(data.Dataset):
-    def __init__(self, root_dir, input_dim=224, offset=0, cls_choice=None, occlusion_level=0):
-        if occlusion_level > 0:
-            self.root_dir = os.path.join(root_dir, 'PASCAL3D_OCC_NeMo')
-            self.data_pendix = 'FGL%d_BGL%d' % (occlusion_level, occlusion_level)
-        else:
-            self.root_dir = os.path.join(root_dir, 'PASCAL3D_NeMo')
+    def __init__(self, root_dir, train=False, input_dim=224, offset=0, rot=0,
+                 bs=32, cls_choice=None, occlusion_level=0, pose_batch=None):
+        if train:
+            self.root_dir = os.path.join(root_dir, 'PASCAL3D_train_NeMo')
             self.data_pendix = ''
+        else:
+            if occlusion_level > 0:
+                self.root_dir = os.path.join(root_dir, 'PASCAL3D_OCC_NeMo')
+                self.data_pendix = 'FGL%d_BGL%d' % (occlusion_level, occlusion_level)
+            else:
+                self.root_dir = os.path.join(root_dir, 'PASCAL3D_NeMo')
+                self.data_pendix = ''
 
         self.input_dim = input_dim
         self.offset = offset
         self.cls_name = cls_choice
+        self.train = train
+        self.rot = rot
 
         self.image_path = os.path.join(self.root_dir, 'images')
 
@@ -57,21 +64,49 @@ class Pascal3D_NeMo(data.Dataset):
                             if name not in blacklist[cat]]
 
         self.annotation_path = os.path.join(self.root_dir, 'annotations')
-        self.im_transform = transforms.Compose([transforms.ToTensor(), normalize])
+
+        self.pose_batch = pose_batch
+        self.bs = bs
+        if pose_batch:
+            self.pose_index = {}
+            for i in range(12):
+                self.pose_index[i] = []
+            for i in range(len(self.df)):
+                pose_cls = int(self.df.iloc[i]['azimuth'] // 30)
+                self.pose_index[pose_cls].append(i)
+
+        if train:
+            self.im_transform = transforms.Compose([
+                transforms.RandomApply([transforms.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5)], p=0.8),
+                transforms.RandomGrayscale(p=0.2),
+                transforms.ToTensor(),
+                normalize,
+                disturb
+            ])
+        else:
+            self.im_transform = transforms.Compose([transforms.ToTensor(), normalize])
 
     def __len__(self):
         return len(self.image_names)
 
     def __getitem__(self, idx):
+        if self.pose_batch:
+            batch_index = int(idx // self.bs)
+            cls_index = batch_index % 12
+            sample_index = (self.bs * idx // (12 * self.bs) + idx % self.bs) % len(self.pose_index[cls_index])
+            idx = self.pose_index[cls_index][sample_index]
+
         img_name = self.image_names[idx]['name']
         category = self.image_names[idx]['category']
-        cat_index = np.array([categories.index(category)])
-        cat_index = torch.from_numpy(cat_index).long()
+        cls_index = np.array([categories.index(category)])
+        cls_index = torch.from_numpy(cls_index).long()
 
         # TODO read bbox instead
         annotation_file = np.load(os.path.join(
             self.annotation_path, category + self.data_pendix, img_name.split('.')[0] + '.npz'), allow_pickle=True)
         upper, lower, left, right, _, _ = annotation_file['box_obj']
+        if left > right or lower < upper:
+            raise ValueError('Sample %s[%s] has invalid bbox' % (category, img_name))
 
         # load gt viewpoint label
         label = np.array([annotation_file['azimuth'], annotation_file['elevation'], annotation_file['theta']])
@@ -83,21 +118,56 @@ class Pascal3D_NeMo(data.Dataset):
         im = Image.open(img_path).convert('RGB')
         im_pos = im.copy()
 
-        if left > right or lower < upper:
-            raise ValueError('Sample %s[%s] has invalid bbox' % (category, img_name))
+        if self.train:
+            # gaussian blur
+            if min(right - left, lower - upper) > 224 and np.random.random() > 0.5:
+                blur_size = np.random.randint(low=1, high=5)
+                im = im.filter(ImageFilter.GaussianBlur(blur_size))
 
-        # crop the original image with GT box
-        im = im.crop((left, upper, right, lower))
-        im_flip = im.transpose(Image.FLIP_LEFT_RIGHT)
-        im = resize_pad(im, self.input_dim)
-        im_flip = resize_pad(im_flip, self.input_dim)
-        im = self.im_transform(im)
-        im_flip = self.im_transform(im_flip)
+            # crop the original image with 2D box jittering
+            im = random_crop(im, left, upper, right - left, lower - upper)
+            im_pos = random_crop(im_pos, left, upper, right - left, lower - upper)
+            im_pos = resize_pad(im_pos, self.input_dim)
+            im_pos = self.im_transform(im_pos)
+
+            # get rotated image for regularization
+            r = random.choice([-self.rot, self.rot])
+            im_rot = im.rotate(r)
+            im_rot = resize_pad(im_rot, self.input_dim)
+            im_rot = self.im_transform(im_rot)
+            label_rot = label.copy()
+            label_rot[2] = label_rot[2] + r
+            label_rot[2] += 360 if label_rot[2] < -180 else (-360 if label_rot[2] > 180 else 0)
+            label_rot = process_viewpoint_label(label_rot, self.offset)
+
+            # get flipped image for regularization
+            im_flip = im.transpose(Image.FLIP_LEFT_RIGHT)
+            im_flip = resize_pad(im_flip, self.input_dim)
+            im_flip = self.im_transform(im_flip)
+            label_flip = label.copy()
+            label_flip[0] = 360 - label_flip[0]
+            label_flip[2] = -label_flip[2]
+            label_flip = process_viewpoint_label(label_flip, self.offset)
+
+            # image to tensor
+            im = resize_pad(im, self.input_dim)
+            im = self.im_transform(im)
+        else:
+            # crop the original image with GT box
+            im = im.crop((left, upper, right, lower))
+            im_flip = im.transpose(Image.FLIP_LEFT_RIGHT)
+            im = resize_pad(im, self.input_dim)
+            im_flip = resize_pad(im_flip, self.input_dim)
+            im = self.im_transform(im)
+            im_flip = self.im_transform(im_flip)
 
         # change angle labels to values >= 0
         label = process_viewpoint_label(label, self.offset)
 
-        return cat_index, im, label, im_flip
+        if self.train:
+            return cls_index, im, label, im_flip, label_flip, im_rot, label_rot, im_pos
+        else:
+            return cls_index, im, label, im_flip
 
 class KITTI3D_NeMo(data.Dataset):
     def __init__(self, root_dir, input_dim=224, offset=0, occlusion_level=0):
@@ -121,8 +191,8 @@ class KITTI3D_NeMo(data.Dataset):
     def __getitem__(self, idx):
         img_name = self.image_names[idx]
         category = 'car'
-        cat_index = np.array([categories.index(category)])
-        cat_index = torch.from_numpy(cat_index).long()
+        cls_index = np.array([categories.index(category)])
+        cls_index = torch.from_numpy(cls_index).long()
 
         # read bbox
         annotation_file = np.load(os.path.join(
@@ -152,7 +222,7 @@ class KITTI3D_NeMo(data.Dataset):
         # change angle labels to values >= 0
         label = process_viewpoint_label(label, self.offset)
 
-        return cat_index, im, label, im_flip
+        return cls_index, im, label, im_flip
 
 class Pascal3D(data.Dataset):
     def __init__(self, root_dir, annotation_file, train=True, input_dim=224, offset=0, shot=None, train_feat=False,
@@ -297,7 +367,7 @@ class Pascal3D(data.Dataset):
             im_flip = self.im_transform(im_flip)
 
         # chaneg angle labels to values >= 0
-        # label = process_viewpoint_label(label, self.offset)
+        label = process_viewpoint_label(label, self.offset)
 
         if self.train:
             return cls_index, im, label, im_flip, label_flip, im_rot, label_rot, im_pos
@@ -324,7 +394,7 @@ if __name__ == '__main__':
         trainset = KITTI3D_NeMo(root_dir=root_dir, occlusion_level=0)
 
     idx = np.random.randint(0, len(trainset))
-    cat_index, im, label, im_flip = trainset[idx]
+    cls_index, im, label, im_flip = trainset[idx]
     print(label)
     cv2.imshow('', im.detach().permute(1,2,0).cpu().numpy())
     cv2.waitKey(0)

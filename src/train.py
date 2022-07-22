@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 
 from model.resnet import resnet50
 from model.vp_estimator import BaselineEstimator, Estimator
-from dataset.vp_data import Pascal3D
+from dataset.vp_data import Pascal3D, Pascal3D_NeMo
 from model.model_utils import save_checkpoint, load_checkpoint, adjust_learning_rate, poseNCE, freeze_model
 from dataset.data_utils import AverageValueMeter, rotation_acc, rotation_err
 from utils.logger import get_logger
@@ -28,6 +28,7 @@ parser.add_argument('--weighting', type=str, default='linear', choices=['linear'
 parser.add_argument('--tau', type=float, default=0.5)
 
 parser.add_argument('--dataset', type=str, default='Pascal3D', choices=['ObjectNet3D', 'Pascal3D'])
+parser.add_argument('--nemo_mode', action='store_true')
 parser.add_argument('--shot', type=int, default=None, help='K shot number')
 parser.add_argument('--pretrain', type=str, default=None, help='pretrain model path')
 parser.add_argument('--log', type=str, default="trainer", help='logger name')
@@ -60,8 +61,12 @@ root_dir = os.path.join('data', args.dataset)
 annotation_file = '{}.txt'.format(args.dataset)
 
 if args.dataset == 'Pascal3D':
-    dataset_train = Pascal3D(train=True, root_dir=root_dir, annotation_file=annotation_file, rot=args.rot, bs=args.bs)
-    dataset_val = Pascal3D(train=False, root_dir=root_dir, annotation_file=annotation_file)
+    if args.nemo_mode:
+        dataset_train = Pascal3D_NeMo(train=True, root_dir=root_dir, rot=args.rot, bs=args.bs)
+        dataset_val = Pascal3D_NeMo(train=False, root_dir=root_dir)
+    else:
+        dataset_train = Pascal3D(train=True, root_dir=root_dir, annotation_file=annotation_file, rot=args.rot, bs=args.bs)
+        dataset_val = Pascal3D(train=False, root_dir=root_dir, annotation_file=annotation_file)
 
 elif args.dataset == 'ObjectNet3D':
     test_classes = ['bed', 'bookshelf', 'calculator', 'cellphone', 'computer', 'door', 'filing_cabinet', 'guitar', 'iron',
