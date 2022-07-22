@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchvision.models import resnet50
 
 import sys
 from dataset.data_utils import rotation_err
@@ -34,13 +35,19 @@ def save_checkpoint(state, filename):
     torch.save(state, filename)
 
 
-def load_checkpoint(model, pth_file, check=False):
+def load_checkpoint(model, pth_file=None, check=False):
     """load state and network weights"""
-    checkpoint = torch.load(pth_file, map_location=lambda storage, loc: storage.cuda())
-    if 'model' in checkpoint.keys():
-        pretrained_dict = checkpoint['model']
+    if pth_file:
+        checkpoint = torch.load(pth_file, map_location=lambda storage, loc: storage.cuda())
+
+        if 'model' in checkpoint.keys():
+            pretrained_dict = checkpoint['model']
+        else:
+            pretrained_dict = checkpoint['state_dict']
     else:
+        checkpoint = resnet50(weights="IMAGENET1K_V2")
         pretrained_dict = checkpoint['state_dict']
+
     model_dict = model.state_dict()
 
     if check:
@@ -191,14 +198,14 @@ def poseNCE(feat_ori, feat_pos, label, tau=0.1, weighting="linear"):
     feat_all = feat_ori.clone()
     label_all = label.clone()
     b = feat_ori.shape[0]
-    
+
     # compute pose-distance in adjacency (N, N)
     label_ori_rep = label.reshape(-1, 1, 3).repeat(1, b, 1)
     label_all_rep = label_all.reshape(1, -1, 3).repeat(b, 1, 1)
     dist = rotation_err(label_ori_rep.reshape(-1, 3), label_all_rep.reshape(-1, 3))
     dist = dist.reshape(b, b)
 
-    # rescale the dist from [0, 180] degrees to [0, 1] 
+    # rescale the dist from [0, 180] degrees to [0, 1]
     if weighting == 'linear':
         dist = dist / 180
     elif weighting == 'square':
@@ -213,7 +220,7 @@ def poseNCE(feat_ori, feat_pos, label, tau=0.1, weighting="linear"):
     # logites
     l_pos = torch.exp(torch.einsum('nc,nc->n', [feat_ori, feat_pos]).unsqueeze(-1) / tau)  # (N,1)
     l_neg = torch.exp(torch.einsum('nc,ck->nk', [feat_ori, feat_all.transpose(0, 1)]) / tau) * dist  # (N, N)
-    
+
     logits = torch.cat([l_pos, l_neg], dim=1)
 
     # loss
