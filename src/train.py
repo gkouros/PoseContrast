@@ -3,6 +3,7 @@ import os, sys
 import time
 import pickle
 import numpy as np
+from tqdm.auto import tqdm
 
 import torch
 import torch.nn as nn
@@ -144,7 +145,7 @@ def train(logger, data_loader, net_feat, net_vp, optimizer_feat, optimizer_vp):
 
     net_vp.train()
 
-    for i, data in enumerate(data_loader):
+    for i, data in tqdm(enumerate(data_loader), total=len(data_loader)):
         # load data and label
         cls_index, im, label, im_flip, label_flip, im_rot, label_rot, im_pos = data
         im, label = im.cuda(), label.cuda()
