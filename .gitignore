@@ -5,6 +5,7 @@ __pycache__/
 *.pth
 data/
 *.code-workspace
+.vscode
 
 # C extensions
 *.so
