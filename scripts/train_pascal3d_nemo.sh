@@ -6,5 +6,5 @@ pretrain=""
 exp_dir="exps/PoseContrast_Pascal3D_NeMo_ImageNetk1_v2"
 
 python src/train.py --gpu $gpu --dataset Pascal3D --nemo_mode --out ${exp_dir} \
-    --bs 32 --epochs 15 --lr_step 12 --weighting linear  --poseNCE 1 --tau 0.5
+    --bs 32 --epochs 15 --lr_step 12 --weighting linear  --poseNCE 1 --tau 0.5 --crop
     # --pretrain ${pretrain}

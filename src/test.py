@@ -27,6 +27,8 @@ parser.add_argument('--out', type=str, default=None, help='output dir')
 parser.add_argument('--ckpt', type=str, default=None, help='resume pth')
 parser.add_argument('--gpu', type=str, default="0", help='gpu index')
 parser.add_argument('--AggFlip', action='store_true')
+parser.add_argument('--crop', action='store_true')
+
 
 # network training procedure settings
 parser.add_argument('--bs', type=int, default=128, help='batch size')
@@ -118,7 +120,7 @@ if args.dataset == 'Pascal3D':
 
     for cls in test_classes:
         if args.nemo_format:
-            dataset_val = Pascal3D_NeMo(root_dir=root_dir, cls_choice=[cls], occlusion_level=args.occlusion_level)
+            dataset_val = Pascal3D_NeMo(root_dir=root_dir, cls_choice=[cls], occlusion_level=args.occlusion_level, crop=args.crop)
         else:
             dataset_val = Pascal3D(train=False, root_dir=root_dir+"/PASCAL3D+_release1.1", annotation_file=annotation_file, cls_choice=[cls])
         val_loader = DataLoader(dataset_val, batch_size=args.bs, shuffle=False, num_workers=args.workers)

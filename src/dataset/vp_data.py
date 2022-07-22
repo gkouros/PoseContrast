@@ -37,7 +37,7 @@ normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 
 
 class Pascal3D_NeMo(data.Dataset):
     def __init__(self, root_dir, train=False, input_dim=224, offset=0, rot=0,
-                 bs=32, cls_choice=None, occlusion_level=0, pose_batch=None):
+                 bs=32, cls_choice=None, occlusion_level=0, pose_batch=None, crop=False):
         if train:
             self.root_dir = os.path.join(root_dir, 'PASCAL3D_train_NeMo')
             self.data_pendix = ''
@@ -54,6 +54,7 @@ class Pascal3D_NeMo(data.Dataset):
         self.cls_name = cls_choice
         self.train = train
         self.rot = rot
+        self.crop = crop
 
         self.image_path = os.path.join(self.root_dir, 'images')
 
@@ -127,7 +128,8 @@ class Pascal3D_NeMo(data.Dataset):
                 im = im.filter(ImageFilter.GaussianBlur(blur_size))
 
             # crop the original image with 2D box jittering
-            im = random_crop(im, left, upper, right - left, lower - upper)
+            if self.crop:
+                im = random_crop(im, left, upper, right - left, lower - upper)
             im_pos = random_crop(im_pos, left, upper, right - left, lower - upper)
             im_pos = resize_pad(im_pos, self.input_dim)
             im_pos = self.im_transform(im_pos)
@@ -156,7 +158,8 @@ class Pascal3D_NeMo(data.Dataset):
             im = self.im_transform(im)
         else:
             # crop the original image with GT box
-            im = im.crop((left, upper, right, lower))
+            if self.crop:
+                im = im.crop((left, upper, right, lower))
             im_flip = im.transpose(Image.FLIP_LEFT_RIGHT)
             im = resize_pad(im, self.input_dim)
             im_flip = resize_pad(im_flip, self.input_dim)

@@ -30,6 +30,7 @@ parser.add_argument('--tau', type=float, default=0.5)
 
 parser.add_argument('--dataset', type=str, default='Pascal3D', choices=['ObjectNet3D', 'Pascal3D'])
 parser.add_argument('--nemo_mode', action='store_true')
+parser.add_argument('--crop', action='store_true')
 parser.add_argument('--shot', type=int, default=None, help='K shot number')
 parser.add_argument('--pretrain', type=str, default=None, help='pretrain model path')
 parser.add_argument('--log', type=str, default="trainer", help='logger name')
@@ -63,8 +64,8 @@ annotation_file = '{}.txt'.format(args.dataset)
 
 if args.dataset == 'Pascal3D':
     if args.nemo_mode:
-        dataset_train = Pascal3D_NeMo(train=True, root_dir=root_dir, rot=args.rot, bs=args.bs)
-        dataset_val = Pascal3D_NeMo(train=False, root_dir=root_dir)
+        dataset_train = Pascal3D_NeMo(train=True, root_dir=root_dir, rot=args.rot, bs=args.bs, crop=args.crop)
+        dataset_val = Pascal3D_NeMo(train=False, root_dir=root_dir, crop=args.crop)
     else:
         dataset_train = Pascal3D(train=True, root_dir=root_dir, annotation_file=annotation_file, rot=args.rot, bs=args.bs)
         dataset_val = Pascal3D(train=False, root_dir=root_dir, annotation_file=annotation_file)
