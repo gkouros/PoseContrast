@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 
 from model.resnet import resnet50
 from model.vp_estimator import BaselineEstimator, Estimator
-from dataset.vp_data import Pascal3D
+from dataset.vp_data import Pascal3D, Pascal3D_NeMo, KITTI3D_NeMo
 from dataset.data_utils import AverageValueMeter, rotation_acc, rotation_err
 from utils.logger import get_logger
 from validation import val
@@ -20,6 +20,8 @@ parser = argparse.ArgumentParser()
 
 # basic settings
 parser.add_argument('--dataset', type=str, default='Pascal3D')
+parser.add_argument('--occlusion_level', type=int, default=0)
+parser.add_argument('--nemo_format', action='store_true', default=False)
 parser.add_argument('--log', type=str, default="tester", help='logger name')
 parser.add_argument('--out', type=str, default=None, help='output dir')
 parser.add_argument('--ckpt', type=str, default=None, help='resume pth')
@@ -53,7 +55,8 @@ def test_category(val_loader, net_feat, net_vp, out, logger, cls, AggFlip=False)
 
     # calculate the rotation errors between prediction and ground truth
     test_errs = rotation_err(predictions, labels.float()).cpu().numpy()
-    Acc = np.mean(test_errs <= 30)
+    Acc30 = np.mean(test_errs <= 30)
+    Acc10 = np.mean(test_errs <= 10)
     Med = np.median(test_errs)
 
     scores = scores.cpu().numpy()
@@ -63,11 +66,11 @@ def test_category(val_loader, net_feat, net_vp, out, logger, cls, AggFlip=False)
     with open(out_file, 'wb') as f:
         pickle.dump(correlation, f, protocol=4)
 
-    text = 'Acc_pi/6 is {:.2f} and Med_Err is {:.2f} for class {}\n'.format(Acc, Med, cls)
+    text = 'Acc_pi/18 is {:.3f} and Acc_pi/30 is {:.3f} and Med_Err is {:.1f} for class {}\n'.format(Acc10, Acc30, Med, cls)
     logger.info(text)
     print(text)
 
-    return Acc, Med, test_errs
+    return Acc10, Acc30, Med, test_errs
 # ========================================================== #
 
 
@@ -103,28 +106,44 @@ logger.info(args)
 
 root_dir = os.path.join('data', args.dataset)
 annotation_file = '{}.txt'.format(args.dataset)
-Accs, Meds = [], []
+Accs10, Accs30, Meds = [], [], []
 Errs = []
 
 
 if args.dataset == 'Pascal3D':
     test_classes = ['aeroplane', 'bicycle', 'boat', 'bottle', 'bus', 'car',
                     'chair', 'diningtable', 'motorbike', 'sofa', 'train', 'tvmonitor']
+    # test_classes = ['motorbike']
+    # test_classes = ['sofa', 'train', 'tvmonitor']
 
     for cls in test_classes:
-        dataset_val = Pascal3D(train=False, root_dir=root_dir, annotation_file=annotation_file, cls_choice=[cls])
+        if args.nemo_format:
+            dataset_val = Pascal3D_NeMo(root_dir=root_dir, cls_choice=[cls], occlusion_level=args.occlusion_level)
+        else:
+            dataset_val = Pascal3D(train=False, root_dir=root_dir+"/PASCAL3D+_release1.1", annotation_file=annotation_file, cls_choice=[cls])
         val_loader = DataLoader(dataset_val, batch_size=args.bs, shuffle=False, num_workers=args.workers)
         print('Tested on %d images of category %s' % (len(dataset_val), cls))
 
-        cls_accs, cls_meds, cls_errs = test_category(val_loader, net_feat, net_vp, pred_dir, logger, cls, args.AggFlip)
-        Accs.append(cls_accs)
+        cls_accs10, cls_accs30, cls_meds, cls_errs = test_category(val_loader, net_feat, net_vp, pred_dir, logger, cls, args.AggFlip)
+        Accs10.append(cls_accs10)
+        Accs30.append(cls_accs30)
         Meds.append(cls_meds)
         Errs.extend(cls_errs)
+elif args.dataset == 'KITTI3D':
+    test_classes = ['car']
+    dataset_val = KITTI3D_NeMo(root_dir=root_dir, occlusion_level=args.occlusion_level)
+    val_loader = DataLoader(dataset_val, batch_size=args.bs, shuffle=False, num_workers=args.workers)
+    print('Tested on %d images of category %s' % (len(dataset_val), 'car'))
 
+    cls_accs10, cls_accs30, cls_meds, cls_errs = test_category(val_loader, net_feat, net_vp, pred_dir, logger, 'car', args.AggFlip)
+    Accs10.append(cls_accs10)
+    Accs30.append(cls_accs30)
+    Meds.append(cls_meds)
+    Errs.extend(cls_errs)
 elif args.dataset == 'ObjectNet3D':
     test_classes = ['bed', 'bookshelf', 'calculator', 'cellphone', 'computer', 'door', 'filing_cabinet', 'guitar', 'iron',
                     'knife', 'microwave', 'pen', 'pot', 'rifle', 'shoe', 'slipper', 'stove', 'toilet', 'tub', 'wheelchair']
-    
+
     df = pd.read_csv(os.path.join(root_dir, annotation_file))
     all_classes = np.unique(df.cls_name)
     base_classes = [c for c in all_classes if c not in test_classes]
@@ -135,19 +154,20 @@ elif args.dataset == 'ObjectNet3D':
         val_loader = DataLoader(dataset_val, batch_size=args.bs, shuffle=False, num_workers=args.workers)
 
         print('Tested on %d images of category %s' % (len(dataset_val), cls))
-        cls_accs, cls_meds, cls_errs = test_category(val_loader, net_feat, net_vp, pred_dir, logger, cls, args.AggFlip)
-        Accs.append(cls_accs)
+        cls_accs10, cls_accs30, cls_meds, cls_errs = test_category(val_loader, net_feat, net_vp, pred_dir, logger, cls, args.AggFlip)
+        Accs10.append(cls_accs10)
+        Accs30.append(cls_accs30)
         Meds.append(cls_meds)
         Errs.extend(cls_errs)
 
-    text = '\nAverage for Base Class  >>>>  Acc_pi/6 is {:.2f} and Med_Err is {:.2f}'.format(
-        np.mean(Accs[:80]), np.mean(Meds[:80])
+    text = '\nAverage for Base Class  >>>> Acc_pi/18 is {:.3f} and Acc_pi/6 is {:.3f} and Med_Err is {:.1f}'.format(
+        np.mean(Accs10[:80]), np.mean(Accs30[:80]), np.mean(Meds[:80])
     )
     logger.info(text)
     print(text)
 
-    text = 'Average for Novel Class  >>>>  Acc_pi/6 is {:.2f} and Med_Err is {:.2f}\n'.format(
-        np.mean(Accs[80:]), np.mean(Meds[80:])
+    text = 'Average for Novel Class  >>>> Acc_pi/18 is {:.3f} and Acc_pi/6 is {:.3f} and Med_Err is {:.1f}\n'.format(
+        np.mean(Accs10[80:]), np.mean(Accs30[80:]), np.mean(Meds[80:])
     )
     logger.info(text)
     print(text)
@@ -160,22 +180,23 @@ elif args.dataset == 'Pix3D':
         val_loader = DataLoader(dataset_val, batch_size=args.bs, shuffle=False, num_workers=args.workers)
 
         print('Tested on %d images of category %s' % (len(dataset_val), cls))
-        cls_accs, cls_meds, cls_errs = test_category(val_loader, net_feat, net_vp, pred_dir, logger, cls, args.AggFlip)
-        Accs.append(cls_accs)
+        cls_accs110, cls_accs30, cls_meds, cls_errs = test_category(val_loader, net_feat, net_vp, pred_dir, logger, cls, args.AggFlip)
+        Accs10.append(cls_accs10)
+        Accs30.append(cls_accs30)
         Meds.append(cls_meds)
         Errs.extend(cls_errs)
 
 else:
     sys.exit(0)
 
-text = '\nAverage for All Classes  >>>>  Acc_pi/6 is {:.2f} and Med_Err is {:.2f}'.format(
-    np.mean(Accs), np.mean(Meds)
+text = '\nAverage for All Classes  >>>> Acc_pi/18 is {:.3f} and Acc_pi/6 is {:.3f} and Med_Err is {:.1f}'.format(
+    np.mean(Accs10), np.mean(Accs30), np.mean(Meds)
 )
 logger.info(text)
 print(text)
 
-text = 'Average for All Samples  >>>>  Acc_pi/6 is {:.2f} and Med_Err is {:.2f}'.format(
-    np.mean(np.array(Errs) <= 30), np.median(np.array(Errs))
+text = 'Average for All Samples  >>>> Acc_pi/18 is {:.3f} and Acc_pi/6 is {:.3f} and Med_Err is {:.1f}'.format(
+    np.mean(np.array(Errs) <= 10), np.mean(np.array(Errs) <= 30), np.median(np.array(Errs))
 )
 logger.info(text)
 print(text)
