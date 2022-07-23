@@ -133,7 +133,7 @@ logger.info('validation set: {}\n'.format(len(dataset_val)))
 
 
 # =================== DEFINE TRAIN ========================= #
-def train(logger, data_loader, net_feat, net_vp, optimizer_feat, optimizer_vp):
+def train(logger, data_loader, net_feat, net_vp, optimizer_feat, optimizer_vp, epoch):
 
     train_loss = AverageValueMeter()
     train_acc_rot = AverageValueMeter()
@@ -146,7 +146,7 @@ def train(logger, data_loader, net_feat, net_vp, optimizer_feat, optimizer_vp):
 
     net_vp.train()
 
-    for i, data in tqdm(enumerate(data_loader), total=len(data_loader)):
+    for i, data in tqdm(enumerate(data_loader), total=len(data_loader), desc='Epoch: #%d - Iteration:' % epoch):
         # load data and label
         cls_index, im, label, im_flip, label_flip, im_rot, label_rot, im_pos = data
         im, label = im.cuda(), label.cuda()
@@ -220,7 +220,7 @@ for epoch in range(start_epoch, args.epochs):
         adjust_learning_rate(optimizer_vp, args.lr_vp)
 
     # train
-    train_loss, train_acc = train(logger, train_loader, net_feat, net_vp, optimizer_feat, optimizer_vp)
+    train_loss, train_acc = train(logger, train_loader, net_feat, net_vp, optimizer_feat, optimizer_vp, epoch)
 
     # evaluate
     eval_acc = val(val_loader, net_feat, net_vp)[0]
