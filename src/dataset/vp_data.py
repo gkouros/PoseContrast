@@ -130,7 +130,7 @@ class Pascal3D_NeMo(data.Dataset):
             # crop the original image with 2D box jittering
             if self.crop:
                 im = random_crop(im, left, upper, right - left, lower - upper)
-            im_pos = random_crop(im_pos, left, upper, right - left, lower - upper)
+                im_pos = random_crop(im_pos, left, upper, right - left, lower - upper)
             im_pos = resize_pad(im_pos, self.input_dim)
             im_pos = self.im_transform(im_pos)
 
