@@ -2,15 +2,17 @@ Universe = vanilla
 
 RequestCpus = 4
 Request_GPUs = 1
-RequestMemory = 11Gb
+RequestMemory = 15Gb
 +RequestWalltime = 259000
 
-Requirements = (CUDACapability >= 5.0)&&(CUDAGlobalMemoryMb >= 11000.0)&&(machine != "stadius-nc-4.esat.kuleuven.be")&&(machine != "stadius-nc-5.esat.kuleuven.be")
+Requirements = (CUDACapability >= 5.0)&&(CUDAGlobalMemoryMb >= 15000.0)&&(machine != "stadius-nc-4.esat.kuleuven.be")&&(machine != "stadius-nc-5.esat.kuleuven.be")
 
 NiceUser = false
 
 Initialdir = /users/visics/gkouros/projects/pose-estimation/PoseContrast
 Executable = /users/visics/gkouros/projects/pose-estimation/PoseContrast/condor/train.sh
+
+Arguments = $(Cluster)
 
 Log    =  condor/logs/train_pascal3d.$(Cluster).log
 Output =  condor/logs/train_pascal3d.$(Cluster).out
