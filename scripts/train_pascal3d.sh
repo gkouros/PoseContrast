@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-gpu=0
+gpu=${CUDA_VISIBLE_DEVICES}
 pretrain="pretrain_models/res50_moco_v2_800ep_pretrain.pth"
 exp_dir="exps/PoseContrast_Pascal3D_MOCOv2"
 
