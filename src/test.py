@@ -31,7 +31,7 @@ parser.add_argument('--crop', action='store_true')
 
 
 # network training procedure settings
-parser.add_argument('--bs', type=int, default=128, help='batch size')
+parser.add_argument('--bs', type=int, default=1, help='batch size')
 parser.add_argument('--epochs', type=int, default=200, help='training epochs')
 parser.add_argument('--workers', type=int, help='number of data loading workers', default=4)
 

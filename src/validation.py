@@ -1,5 +1,6 @@
 import torch
 from tqdm.auto import tqdm
+import time
 
 from dataset.data_utils import AverageValueMeter, rotation_acc, rotation_err
 
@@ -14,10 +15,15 @@ def val(data_loader, net_feat, net_vp, AggFlip=False):
     net_feat.eval()
     net_vp.eval()
 
+    duration = 0
+    count = 0
+
     with torch.no_grad():
         for i, data in enumerate(tqdm(data_loader)):
             # load data and label
             cls_index, im, label, im_flip = data
+
+            ts = time.time()
             im, label = im.cuda(), label.cuda()
             cls_index = cls_index.cuda()
 
@@ -25,6 +31,9 @@ def val(data_loader, net_feat, net_vp, AggFlip=False):
             feat, _ = net_feat(im)
             out = net_vp(feat)
             vp_pred, score = net_vp.compute_vp_pred(out, True)
+
+            duration += (time.time() - ts)
+            count += 1
             scores.append(score)
 
             # test-time aug with flipped image
@@ -48,6 +57,8 @@ def val(data_loader, net_feat, net_vp, AggFlip=False):
             # append results and labels
             predictions.append(vp_pred)
             labels.append(label)
+
+    print('Inference time: %.4f, Inference rate: %.4f' % (duration/count, count/duration))
 
     predictions = torch.cat(predictions, dim=0)
     labels = torch.cat(labels, dim=0)
