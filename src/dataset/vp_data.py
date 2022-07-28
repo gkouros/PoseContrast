@@ -217,7 +217,7 @@ class KITTI3D_NeMo(data.Dataset):
             raise ValueError('Sample %s[%s] has invalid bbox' % ('car', img_name))
 
         # crop the original image with GT box
-        # im = im.crop((left, upper, right, lower))
+        im = im.crop((left, upper, right, lower))
         im_flip = im.transpose(Image.FLIP_LEFT_RIGHT)
         im = resize_pad(im, self.input_dim)
         im_flip = resize_pad(im_flip, self.input_dim)
